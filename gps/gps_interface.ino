@@ -1,3 +1,8 @@
+#define NMEA_DATA_BUF_SIZE   300
+#define NMEA_BUF_SIZE        200
+#define UBX_DATA_BUF_SIZE    100
+#define UBX_BUF_SIZE         20
+
 void GpsSetConfiguration()
 {
   
@@ -11,9 +16,6 @@ void GpsSetConfiguration()
     {
       b = GpsSerial.read(); 
       GpsParseUbx(b);
-      //Serial.print("[");
-      //Serial.print(b, HEX);
-      //Serial.print("]");      
     }
 
     // Periodically send set navigation 
@@ -47,9 +49,6 @@ void GpsParseNmea(char c)
   else // DataBuf is full
   {
     // Reset DataBuf
-    //Serial.println("");
-    //Serial.println("Data buffer full, resetting");
-    //Serial.println("");
     memset(DataBuf,0,sizeof(DataBuf));
     DataBufLen = 0;
     DataBuf[DataBufLen] = c;
@@ -77,7 +76,6 @@ void GpsParseNmea(char c)
     // Check for nmea msg end 
     if ( (DataBuf[DataBufLen-2] == '\r') && (DataBuf[DataBufLen-1] == '\n') )
     {
-      //Serial.println(" -Msg end- ");
       GpsProcessNmeaMsg(NmeaBuf, NmeaBufLen);
       
       // Reset DataBuf
@@ -100,7 +98,6 @@ void GpsParseNmea(char c)
       // Check for start of a nmea message
       if ( (DataBuf[DataBufLen-2] == '$') && (DataBuf[DataBufLen-1] == 'G') )
       {
-        //Serial.print(" -Msg start- ");
         ParsingNmeaMsg = true;
         
         // Start saving to nmea buffer
@@ -131,7 +128,6 @@ void GpsParseUbx(byte b)
   else // DataBuf is full
   {
     // Reset DataBuf
-    //Serial.println("Data buffer full, resetting");
     memset(DataBuf,0,sizeof(DataBuf));
     DataBufLen = 0;
     DataBuf[DataBufLen] = b;

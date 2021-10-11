@@ -1,10 +1,5 @@
 #include <SoftwareSerial.h>
 
-#define NMEA_DATA_BUF_SIZE   300
-#define NMEA_BUF_SIZE        200
-#define UBX_DATA_BUF_SIZE    100
-#define UBX_BUF_SIZE         20
-
 // Global Variables
 int  GpsRxPin = 2;
 int  GpsTxPin = 3;
