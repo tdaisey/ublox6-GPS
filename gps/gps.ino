@@ -7,10 +7,24 @@
 #define PARSE_UBX       2
 
 // Global Variables
-int GpsRxPin = 2;
-int GpsTxPin = 3;
-int GpsBaud  = 9600;   
-int ParseProtocol = PARSE_NMEA;
+int  GpsRxPin = 2;
+int  GpsTxPin = 3;
+int  GpsBaud  = 9600;   
+int  ParseProtocol = PARSE_UBX;
+bool GpsConfigured = false;
+
+/*
+ * Dynamic Platform model:
+ * 0 = Portable
+ * 2 = Stationary
+ * 3 = Pedestrian
+ * 4 = Automotive
+ * 5 = Sea
+ * 6 = Airborne with <1g Acceleration
+ * 7 = Airborne with <2g Acceleration
+ * 8 = Airborne with <4g Acceleration
+ */
+int DesiredPlatformMode = 7;
 
 // Gps Serial Interface
 SoftwareSerial GpsSerial(GpsRxPin, GpsTxPin);  
@@ -25,27 +39,52 @@ void setup()
   GpsSerial.begin(GpsBaud);
 }
 
+// Main Loop
 void loop()
 {
   char c;
+  byte b;
+  static int LoopCnt = 0;
   
   // Data available?
   while (GpsSerial.available() > 0)
   {
     // Read one byte at a time
     // from the gps serial port
-    c = GpsSerial.read();
-    Serial.print(c);
-
     if (ParseProtocol == PARSE_NMEA)
     {
+      c = GpsSerial.read();
       GpsParseNmea(c);
+      Serial.print(c);
     }
     else if (ParseProtocol == PARSE_UBX)
     {
-      GpsParseUbx(c);
+      b = GpsSerial.read(); 
+      GpsParseUbx(b);
+      Serial.print("[");
+      Serial.print(b, HEX);
+      Serial.print("]");
     }
   }
+
+  // Gps not configured?
+  if (!GpsConfigured)
+  {
+    // Periodically request the 
+    // Nav Engine Settings Msg
+    if (LoopCnt == 100)
+    {
+      Serial.println("");
+      Serial.println("");
+      Serial.println("Setting Navigation Engine");
+      GpsSetNavigationEngineSettings();
+      LoopCnt = 0;
+    }
+  }
+
+  LoopCnt++;
+
+  delay(10);
 }
 
 void GpsParseNmea(char c)
@@ -54,12 +93,7 @@ void GpsParseNmea(char c)
   static int  DataBufLen = 0;
   static char NmeaBuf[NMEA_BUF_SIZE];
   static int  NmeaBufLen = 0;
-  static char UbxBuf[UBX_BUF_SIZE];
-  static int  UbxBufLen = 0;  
   static bool ParsingNmeaMsg = false;
-  static bool ParsingUbxMsg = false;
-  
-  //Serial.print(c);
 
   // If DataBuf is not full,
   // add the char to LineBuf
@@ -71,9 +105,13 @@ void GpsParseNmea(char c)
   else // DataBuf is full
   {
     // Reset DataBuf
+    Serial.println("");
     Serial.println("Data buffer full, resetting");
+    Serial.println("");
     memset(DataBuf,0,sizeof(DataBuf));
     DataBufLen = 0;
+    DataBuf[DataBufLen] = c;
+    DataBufLen++;
   }
 
   // Already parsing nmea message?
@@ -133,36 +171,67 @@ void GpsParseNmea(char c)
   }
 }
 
-void GpsParseUbx(char c)
+void GpsParseUbx(byte b)
 { 
-  static char DataBuf[DATA_BUF_SIZE];
+  static byte DataBuf[DATA_BUF_SIZE];
   static int  DataBufLen = 0;
-  static char UbxBuf[UBX_BUF_SIZE];
+  static byte UbxBuf[UBX_BUF_SIZE];
   static int  UbxBufLen = 0;  
   static bool ParsingUbxMsg = false;  
-
-  //Serial.print(c);
 
   // If DataBuf is not full,
   // add the char to LineBuf
   if (DataBufLen < DATA_BUF_SIZE)
   {
-    DataBuf[DataBufLen] = c;
+    DataBuf[DataBufLen] = b;
     DataBufLen++;
   }
   else // DataBuf is full
   {
     // Reset DataBuf
+    Serial.println("");
     Serial.println("Data buffer full, resetting");
+    Serial.println("");
     memset(DataBuf,0,sizeof(DataBuf));
     DataBufLen = 0;
+    DataBuf[DataBufLen] = b;
+    DataBufLen++;
   }
 
-  // Already parsing nmea message?
+  // Already parsing ubx message?
   if (ParsingUbxMsg)
   {
+    UbxBuf[UbxBufLen] = DataBuf[DataBufLen-1];
+    UbxBufLen++;
     
+    if (UbxBufLen > 9)
+    {      
+      // Check for Set Nav Engine Settings ACK Msg
+      if ( (UbxBuf[0] == 0xB5) &&
+           (UbxBuf[1] == 0x62) &&
+           (UbxBuf[2] == 0x05) &&
+           (UbxBuf[3] == 0x01) &&
+           (UbxBuf[4] == 0x02) &&
+           (UbxBuf[5] == 0x00) &&
+           (UbxBuf[6] == 0x06) &&
+           (UbxBuf[7] == 0x24) &&
+           (UbxBuf[8] == 0x32) &&
+           (UbxBuf[9] == 0x5B) )
+           {
+              // Success! 
+              GpsConfigured = true;
+              Serial.println("");
+              Serial.println("!!! GPS CONFIGURED !!!");
+              Serial.println("");
+           }
+           
+      // Reset UbxBuf
+      UbxBufLen = 0;
+      memset(UbxBuf,0,sizeof(UbxBuf));
+      ParsingUbxMsg = false;
+    }
   }
+  
   else // Not currently parsing a message
   {
     // Need at least two bytes in  
@@ -172,11 +241,17 @@ void GpsParseUbx(char c)
       // Check for start of a nmea message
       if ( (DataBuf[DataBufLen-2] == 0xB5) && (DataBuf[DataBufLen-1] == 0x62) )
       {
-        Serial.print(" -ubx msg start- ");
+        ParsingUbxMsg = true;
+
+        // Start saving to UbxBuf
+        UbxBuf[UbxBufLen] = DataBuf[DataBufLen-2];
+        UbxBufLen++;
+        UbxBuf[UbxBufLen] = DataBuf[DataBufLen-1];
+        UbxBufLen++;
       }
     }
   }  
-}
+} 
 
 void GpsProcessNmeaMsg(char* NmeaMsg, int NnmeaMsgLen)
 { 
@@ -189,14 +264,26 @@ void GpsProcessNmeaMsg(char* NmeaMsg, int NnmeaMsgLen)
   Serial.println("");
 }
 
-
-void GpsRequestNavEngineSettings()
+void GpsGetNavigationEngineSettings()
 {
-  unsigned char GetNavMsg[] = {0xB5, 0x62, 0x06, 0x24,0x00, 0x2A, 0x84};
+  unsigned char GetNavMsg[] = {0xB5, 0x62, 0x06, 0x24, 0x00, 0x00, 0x00, 0x00};
 
-  //GpsCalculateChecksum(GetNavMsg, sizeof(GetNavMsg));
+  GpsCalculateChecksum(GetNavMsg, sizeof(GetNavMsg));
 
   GpsSendMsg(GetNavMsg, sizeof(GetNavMsg));
+}
+
+void GpsSetNavigationEngineSettings()
+{
+  unsigned char SetNavMsg[] = {0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27,
+                               0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x3C, 0x00, 0x00,
+                               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+  SetNavMsg[8] = DesiredPlatformMode;
+
+  GpsCalculateChecksum(SetNavMsg, sizeof(SetNavMsg));
+
+  GpsSendMsg(SetNavMsg, sizeof(SetNavMsg));
 }
 
 void GpsCalculateChecksum(unsigned char *Message, int Length)
