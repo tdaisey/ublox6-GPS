@@ -3,11 +3,30 @@
 #define UBX_DATA_BUF_SIZE    100
 #define UBX_BUF_SIZE         20
 
+// Gps Serial Interface
+SoftwareSerial GpsSerial(GpsRxPin, GpsTxPin);
+
+void GpsProcessData()
+{
+  char c;
+  
+  // Data available?
+  while (GpsSerial.available() > 0)
+  {
+    // Read one byte at a time
+    // from the gps serial port
+    c = GpsSerial.read();
+    GpsParseNmea(c);
+  }  
+}
+
 void GpsSetConfiguration()
 {
   
   byte b;
   int LoopCnt = 0;
+
+  GpsSerial.begin(GpsBaud);
 
   // Set and verify GPS configuration 
   while (!GpsConfigured)
@@ -187,12 +206,14 @@ void GpsParseUbx(byte b)
 } 
 
 void GpsProcessNmeaMsg(char* NmeaMsg, int NnmeaMsgLen)
-{ 
-  for(int x=0; x<NnmeaMsgLen; x++)
-  {
-    Serial.print(NmeaMsg[x]);
-  }
-  Serial.println("");
+{
+  #ifdef SerialMonitor 
+    for(int x=0; x<NnmeaMsgLen; x++)
+    {
+      Serial.print(NmeaMsg[x]);
+    }
+    Serial.println("");
+  #endif
 }
 
 void GpsGetNavigationEngineSettings()
@@ -210,7 +231,7 @@ void GpsSetNavigationEngineSettings()
                                0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x3C, 0x00, 0x00,
                                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
-  SetNavMsg[8] = DesiredGpsPlatformMode;
+  SetNavMsg[8] = GpsPlatformMode;
 
   GpsCalculateChecksum(SetNavMsg, sizeof(SetNavMsg));
 
