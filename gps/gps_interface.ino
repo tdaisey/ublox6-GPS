@@ -1,3 +1,5 @@
+#include "TinyGPS++.h"
+
 #define NMEA_DATA_BUF_SIZE   300
 #define NMEA_BUF_SIZE        200
 #define UBX_DATA_BUF_SIZE    100
@@ -5,24 +7,112 @@
 
 // Gps Serial Interface
 SoftwareSerial GpsSerial(GpsRxPin, GpsTxPin);
+TinyGPSPlus    NmeaParser;
 
-void GpsProcessData()
+void GpsGetData()
 {
   char c;
   
   // Data available?
   while (GpsSerial.available() > 0)
   {
-    // Read one byte at a time
-    // from the gps serial port
     c = GpsSerial.read();
-    GpsParseNmea(c);
+    NmeaParser.encode(c);
+  }
+
+  // Copy valid/new data to GpsData struct
+
+  if ( (NmeaParser.date.isValid()) && (NmeaParser.date.isUpdated()) )
+  {
+    GpsData.Year  = NmeaParser.date.year();
+    GpsData.Month = NmeaParser.date.month();
+    GpsData.Day   = NmeaParser.date.day();
+    #ifdef SerialMonitor
+      Serial.print("Date: ");
+      Serial.print(GpsData.Year);
+      Serial.print(" / ");
+      Serial.print(GpsData.Month);
+      Serial.print(" / ");
+      Serial.println(GpsData.Day);
+      Serial.println("");
+    #endif 
+  }
+  
+  if ( (NmeaParser.time.isValid()) && (NmeaParser.time.isUpdated()) )
+  {
+    GpsData.Hours   = NmeaParser.time.hour();
+    GpsData.Minutes = NmeaParser.time.minute();
+    GpsData.Seconds = NmeaParser.time.second();
+    #ifdef SerialMonitor
+      Serial.print("Time: ");
+      Serial.print(GpsData.Hours);
+      Serial.print(" : ");
+      Serial.print(GpsData.Minutes);
+      Serial.print(" : ");
+      Serial.println(GpsData.Seconds);
+      Serial.println("");
+    #endif 
+  }
+  
+  if ( (NmeaParser.location.isValid()) && (NmeaParser.location.isUpdated()) )
+  {
+    GpsData.Latitude  = NmeaParser.location.lat();
+    GpsData.Longitude = NmeaParser.location.lng();
+    #ifdef SerialMonitor
+      Serial.print("Lat / Long: ");
+      Serial.print(GpsData.Latitude);
+      Serial.print(" / ");
+      Serial.println(GpsData.Longitude);
+      Serial.println("");
+    #endif 
+    #ifdef GpsLed
+      GpsLedBlink();
+    #endif
+  } 
+
+  if ( (NmeaParser.course.isValid()) && (NmeaParser.course.isUpdated()) )
+  {
+    GpsData.Course = NmeaParser.course.deg();
+    #ifdef SerialMonitor
+      Serial.print("Course: ");
+      Serial.println(GpsData.Course);
+      Serial.println("");
+    #endif    
+  } 
+
+  if ( (NmeaParser.speed.isValid()) && (NmeaParser.speed.isUpdated()) )
+  {
+    GpsData.Speed = NmeaParser.speed.mph();
+    #ifdef SerialMonitor
+      Serial.print("Speed: ");
+      Serial.println(GpsData.Speed);
+      Serial.println("");
+    #endif   
+  }      
+   
+  if ( (NmeaParser.altitude.isValid()) && (NmeaParser.altitude.isUpdated()) )
+  {
+    GpsData.Altitude = NmeaParser.altitude.feet();
+    #ifdef SerialMonitor
+      Serial.print("Altitude: ");
+      Serial.println(GpsData.Altitude);
+      Serial.println("");
+    #endif   
   }  
+
+  if ( (NmeaParser.satellites.isValid()) && (NmeaParser.satellites.isUpdated()) )
+  {
+    GpsData.Satellites = NmeaParser.satellites.value();
+    #ifdef SerialMonitor
+      Serial.print("Satellites: ");
+      Serial.println(GpsData.Satellites);
+      Serial.println("");
+    #endif     
+  }
 }
 
 void GpsSetConfiguration()
 {
-  
   byte b;
   int LoopCnt = 0;
 
@@ -48,85 +138,6 @@ void GpsSetConfiguration()
     LoopCnt++;
     delay(10);
   }  
-}
-
-void GpsParseNmea(char c)
-{  
-  static char DataBuf[NMEA_DATA_BUF_SIZE];
-  static int  DataBufLen = 0;
-  static char NmeaBuf[NMEA_BUF_SIZE];
-  static int  NmeaBufLen = 0;
-  static bool ParsingNmeaMsg = false;
-
-  // If DataBuf is not full,
-  // add the char to LineBuf
-  if (DataBufLen < NMEA_DATA_BUF_SIZE)
-  {
-    DataBuf[DataBufLen] = c;
-    DataBufLen++;
-  }
-  else // DataBuf is full
-  {
-    // Reset DataBuf
-    memset(DataBuf,0,sizeof(DataBuf));
-    DataBufLen = 0;
-    DataBuf[DataBufLen] = c;
-    DataBufLen++;
-  }
-
-  // Already parsing nmea message?
-  if (ParsingNmeaMsg)
-  {
-    // Save data to nmea buffer, 
-    // don't overflow it
-    if (NmeaBufLen < NMEA_BUF_SIZE)
-    {
-      NmeaBuf[NmeaBufLen] = DataBuf[DataBufLen-1];
-      NmeaBufLen++;
-    }
-    else // NmeaBuf is full
-    {
-      // Reset NmeaBuf 
-      ParsingNmeaMsg = false;
-      memset(NmeaBuf,0,sizeof(NmeaBuf));
-      NmeaBufLen = 0;
-    }
-    
-    // Check for nmea msg end 
-    if ( (DataBuf[DataBufLen-2] == '\r') && (DataBuf[DataBufLen-1] == '\n') )
-    {
-      GpsProcessNmeaMsg(NmeaBuf, NmeaBufLen);
-      
-      // Reset DataBuf
-      memset(DataBuf,0,sizeof(DataBuf));
-      DataBufLen = 0;
-
-      // Reset NmeaBuf
-      ParsingNmeaMsg = false;
-      memset(NmeaBuf,0,sizeof(NmeaBuf));
-      NmeaBufLen = 0;
-    }       
-  }
-
-  else // Not currently parsing a message
-  {
-    // Need at least two bytes in  
-    // DataBuf to check for messages 
-    if (DataBufLen > 1)
-    {
-      // Check for start of a nmea message
-      if ( (DataBuf[DataBufLen-2] == '$') && (DataBuf[DataBufLen-1] == 'G') )
-      {
-        ParsingNmeaMsg = true;
-        
-        // Start saving to nmea buffer
-        NmeaBuf[0] = '$';
-        NmeaBufLen++;
-        NmeaBuf[1] = 'G';
-        NmeaBufLen++;
-      }
-    }
-  }
 }
 
 void GpsParseUbx(byte b)
@@ -204,17 +215,6 @@ void GpsParseUbx(byte b)
     }
   }  
 } 
-
-void GpsProcessNmeaMsg(char* NmeaMsg, int NnmeaMsgLen)
-{
-  #ifdef SerialMonitor 
-    for(int x=0; x<NnmeaMsgLen; x++)
-    {
-      Serial.print(NmeaMsg[x]);
-    }
-    Serial.println("");
-  #endif
-}
 
 void GpsGetNavigationEngineSettings()
 {

@@ -1,42 +1,57 @@
 #include <SoftwareSerial.h>
 
 #define SerialMonitor;
+#define GpsLed;
 
 // Global Variables
 int  GpsRxPin = 2;
 int  GpsTxPin = 3;
-int  GpsBaud  = 9600;   
-bool GpsConfigured = false;
-int  GpsPlatformMode = 0;
-/*
- * Gps Platform Modes:
- * 0 = Portable
- * 2 = Stationary
- * 3 = Pedestrian
- * 4 = Automotive
- * 5 = Sea
- * 6 = Airborne with <1g Acceleration
- * 7 = Airborne with <2g Acceleration
- * 8 = Airborne with <4g Acceleration
- */  
+int  GpsBaud  = 9600;  
+int  GpsPlatformMode = 0; // See README 
+bool GpsConfigured = false; 
+
+#ifdef GpsLed
+  int GpsLedPin = 4;
+#endif 
+ 
+struct GpsData_t
+{
+  uint16_t Year;
+  uint8_t  Month;
+  uint8_t  Day;
+  uint8_t  Hours; 
+  uint8_t  Minutes; 
+  uint8_t  Seconds;
+  double   Latitude;  // Degrees
+  double   Longitude; // Degrees
+  double   Course;    // Degrees
+  double   Speed;     // Mph
+  double   Altitude;  // Feet
+  uint32_t Satellites;
+} GpsData;
 
 void setup()
 {
-  // Start the Arduino hardware serial port at 9600 baud
-  // Used to communicate with the Serial Monitor
   #ifdef SerialMonitor
     Serial.begin(9600);
   #endif
 
-  // Configure the Gps 
+  #ifdef GpsLed 
+    pinMode(GpsLedPin, OUTPUT);
+  #endif
+
   GpsSetConfiguration();
   #ifdef SerialMonitor
     Serial.println("Gps Configured!");
+    Serial.println("");
   #endif
+  #ifdef GpsLed
+    GpsLedOn();
+  #endif 
 }
 
 // Main Loop
 void loop()
 {
-  GpsProcessData();
+  GpsGetData();
 }
