@@ -17,6 +17,7 @@ void GpsGetData()
   while (GpsSerial.available() > 0)
   {
     c = GpsSerial.read();
+    //Serial.print(c);
     NmeaParser.encode(c);
   }
 
@@ -117,7 +118,10 @@ void GpsSetConfiguration()
   int LoopCnt = 0;
 
   GpsSerial.begin(GpsBaud);
+  
+  GpsConfigured = true;
 
+  /*
   // Set and verify GPS configuration 
   while (!GpsConfigured)
   {
@@ -137,7 +141,8 @@ void GpsSetConfiguration()
 
     LoopCnt++;
     delay(10);
-  }  
+  }
+  */
 }
 
 void GpsParseUbx(byte b)

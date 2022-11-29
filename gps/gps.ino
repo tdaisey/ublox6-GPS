@@ -33,7 +33,7 @@ struct GpsData_t
 void setup()
 {
   #ifdef SerialMonitor
-    Serial.begin(9600);
+    Serial.begin(115200);
   #endif
 
   #ifdef GpsLed 
@@ -41,10 +41,12 @@ void setup()
   #endif
 
   GpsSetConfiguration();
+  
   #ifdef SerialMonitor
     Serial.println("Gps Configured!");
     Serial.println("");
   #endif
+  
   #ifdef GpsLed
     GpsLedOn();
   #endif 
